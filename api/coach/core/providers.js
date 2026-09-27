@@ -31,6 +31,15 @@ export const HTTP_PROVIDERS = Object.freeze({
     defaultModel: 'gemini-2.5-pro',
     keyPlaceholder: 'AIza… or AQ.…'
   }),
+  // Server-side only: OAuth and the Russian CA trust requirements are handled by the
+  // self-hosted API container, not by the native BYOK flow.
+  gigachat: Object.freeze({
+    label: 'GigaChat', runtime: 'HTTPS', http: true, serverOnly: true,
+    apiKeyEnv: 'GIGACHAT_AUTH_KEY', oauthEnv: null,
+    defaultBase: 'https://api.giga.chat',
+    defaultModel: 'GigaChat-3-Ultra',
+    keyPlaceholder: 'Authorization Key from GigaChat Studio'
+  }),
   // Ollama, LM Studio, vLLM, OpenRouter, a corporate gateway: anything that serves the
   // Chat Completions shape. The base URL is the whole configuration; a key is optional
   // because a model on your own LAN usually has none.
@@ -43,7 +52,7 @@ export const HTTP_PROVIDERS = Object.freeze({
   })
 });
 
-export const HTTP_PROVIDER_IDS = Object.freeze(Object.keys(HTTP_PROVIDERS));
+export const HTTP_PROVIDER_IDS = Object.freeze(Object.keys(HTTP_PROVIDERS).filter(id => !HTTP_PROVIDERS[id].serverOnly));
 
 /** The base URL a provider will actually be called at: the configured override, else the default. */
 export function baseUrlFor(id, cfg) {
