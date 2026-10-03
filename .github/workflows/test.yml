@@ -47,7 +47,14 @@ jobs:
       - run: npm test
         working-directory: frontend
       # A broken import or bad JSX fails the build long before any test covers it.
+      # Default is deliberately non-PWA; verify the artifact, then verify the opt-in PWA build.
       - run: npm run build
+        working-directory: frontend
+      - run: npm run verify:non-pwa
+        working-directory: frontend
+      - run: npm run build:pwa
+        working-directory: frontend
+      - run: npm run verify:pwa
         working-directory: frontend
       - run: node scripts/check-locales.mjs
         working-directory: frontend
