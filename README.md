@@ -138,6 +138,60 @@ a build step locally either way.
 > Want it reachable from your phone over the internet with passkeys? You'll need an HTTPS
 > domain — a two-line change in `.env`. See **[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)**.
 
+## Dual web deployment in this fork
+
+This fork can build the **same React frontend in two modes** while keeping one API, one data
+directory and one WebAuthn RP ID:
+
+| Frontend | Build | PWA artifacts |
+|----------|-------|---------------|
+| non-PWA | `npm run build` or Docker `--build-arg PWA=0` | no `manifest.json`, no `sw.js`, no PWA-only Apple/mobile metadata |
+| PWA | `npm run build:pwa` or Docker `--build-arg PWA=1` | manifest, service worker and install metadata included |
+
+The production profile verified on **2026-10-03** is:
+
+```text
+https://igym.yardev.ru  -> non-PWA web
+https://gym.yardev.ru   -> PWA web
+                              \
+                               -> same API -> same ./data
+```
+
+Both hosts intentionally use the same passkey RP:
+
+```env
+RP_ID=gym.yardev.ru
+ORIGIN=https://igym.yardev.ru
+ALLOWED_ORIGINS=https://igym.yardev.ru,https://gym.yardev.ru
+```
+
+`ORIGIN` remains the canonical instance URL. `ALLOWED_ORIGINS` extends WebAuthn verification
+and the Origin-based CSRF fallback to the additional frontend host without changing `RP_ID`.
+For the non-RP host, the RP host serves the WebAuthn Related Origin declaration:
+
+```json
+{"origins":["https://igym.yardev.ru"]}
+```
+
+at `https://gym.yardev.ru/.well-known/webauthn`. This was verified with iPhone passkey
+registration/login on `igym.yardev.ru`, while `gym.yardev.ru` remains the installable PWA.
+Requests from origins outside the configured allow-list are rejected.
+
+The two hosts share credentials through the same RP ID, but browser sessions are still
+host-specific because openGym uses `__Host-` cookies. Signing in on one hostname does not copy
+that session cookie to the other hostname; the same passkey can simply be used to sign in there.
+
+Example source builds:
+
+```bash
+docker build --build-arg PWA=0 -f web/Dockerfile -t opengym-web:non-pwa .
+docker build --build-arg PWA=1 -f web/Dockerfile -t opengym-web:pwa .
+docker build --target default -t opengym-api:default ./api
+```
+
+The default API image is sufficient for normal API-key providers used by this fork; the larger
+`coach` target is only needed for the optional in-container Claude Agent SDK / Codex runtimes.
+
 ## Mobile app (no server at all)
 
 The same codebase also builds a **standalone mobile app** (Capacitor): no account, no sync,
@@ -171,7 +225,7 @@ mobile app is the install-and-done flavor.
 
 - **frontend/** — React + Vite (React Router + Zustand), built to static files **inside Docker**
 - **api/** — Node with no framework, two dependencies (`@simplewebauthn/server` for passkeys, `web-push` for notifications), storing everything as plain JSON files under `./data`
-- **web/** — a multi-stage image that builds the frontend and serves it with nginx, proxying `/api` to the backend so it's all on **one origin** (passkeys require this)
+- **web/** — a multi-stage image that builds the frontend and serves it with nginx, proxying `/api` to the backend. The normal deployment is one origin; this fork also supports explicit multi-origin frontends with `ALLOWED_ORIGINS` plus WebAuthn Related Origin discovery.
 
 The full HTTP API is documented as an OpenAPI spec in [`api/openapi.yaml`](api/openapi.yaml) — browsable at [opengym.duarte-santos.ch/api.html](https://opengym.duarte-santos.ch/api.html).
 
@@ -190,7 +244,8 @@ All via `.env` (see `.env.example`):
 | Variable      | What it is                                           | Default                 |
 |---------------|------------------------------------------------------|-------------------------|
 | `RP_ID`       | Hostname passkeys are bound to                       | `localhost`             |
-| `ORIGIN`      | Full URL the app is served from                      | `http://localhost:8080` |
+| `ORIGIN`      | Canonical full URL for the instance                    | `http://localhost:8080` |
+| `ALLOWED_ORIGINS` | Additional accepted frontend origins for multi-origin WebAuthn/CSRF fallback (comma-separated) | *(none)* |
 | `WEB_PORT`    | Host port for the web UI                             | `8080`                  |
 | `NGINX_PORT`  | Port the web container listens on, inside the container | `80`                 |
 | `BACKEND`     | Name of the API service that `/api` is proxied to — change it if yours isn't called `api` | `api` |
