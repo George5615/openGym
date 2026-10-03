@@ -106,6 +106,8 @@ jobs:
         working-directory: api
       - run: npm test
         working-directory: api
+      - run: node --test origins.test.js verify-error.test.js
+        working-directory: api
       # The api's copy of the exercise catalogue is generated and committed. A dataset change
       # that forgets to regenerate it would otherwise only surface as "the Coach can't find
       # that exercise" on somebody's instance.
