@@ -104,6 +104,53 @@ Visit `https://gym.example.com`, create your profile, and add it to your home sc
 > Changing `RP_ID` later invalidates existing passkeys (they were bound to the old hostname).
 > Pick your domain before people register.
 
+### Optional: normal web + PWA on separate origins
+
+The default frontend build is a normal web app with no manifest or service worker:
+
+```bash
+cd frontend
+npm run build
+```
+
+The PWA build is explicit:
+
+```bash
+cd frontend
+npm run build:pwa
+```
+
+The Docker image uses the same split:
+
+```bash
+docker build --build-arg PWA=0 -f web/Dockerfile -t opengym-web .
+docker build --build-arg PWA=1 -f web/Dockerfile -t opengym-web-pwa .
+```
+
+An advanced deployment can expose both builds through one API/data store and one WebAuthn RP.
+Keep `ORIGIN` as the canonical frontend and list every trusted browser origin in
+`ALLOWED_ORIGINS`:
+
+```env
+RP_ID=gym.example.com
+ORIGIN=https://igym.example.com
+ALLOWED_ORIGINS=https://igym.example.com,https://gym.example.com
+```
+
+When `ALLOWED_ORIGINS` is absent, behavior is backward-compatible: only `ORIGIN` is accepted.
+The list is used for WebAuthn verification and for the CSRF origin fallback on requests where
+`Sec-Fetch-Site` is unavailable. It does not widen cookie scope.
+
+If a page origin uses a different hostname from `RP_ID`, the browser may require a WebAuthn
+Related Origin Request. The RP host must then serve
+`https://<RP_ID>/.well-known/webauthn` as JSON authorizing that origin, for example:
+
+```json
+{"origins":["https://igym.example.com"]}
+```
+
+That browser-side authorization is separate from `ALLOWED_ORIGINS`: both must allow the origin.
+
 ## 4. Multiple users
 
 Anyone who can reach the URL can create their own profile — each gets isolated data. That's the

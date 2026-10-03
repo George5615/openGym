@@ -12,8 +12,17 @@ test('names the configured values when the RP ID does not match', () => {
 });
 
 test('does the same for an origin mismatch, on login and on registration', () => {
-  assert.match(verifyError(new Error('Unexpected authentication response origin'), cfg), /must match the address you opened/);
-  assert.match(verifyError(new Error('Unexpected registration response origin'), cfg), /must match the address you opened/);
+  assert.match(verifyError(new Error('Unexpected authentication response origin'), cfg), /address you opened must be one of those origins/);
+  assert.match(verifyError(new Error('Unexpected registration response origin'), cfg), /address you opened must be one of those origins/);
+});
+
+test('lists every accepted origin in a multi-origin deployment', () => {
+  const out = verifyError(new Error('Unexpected registration response origin'), {
+    rpId: 'gym.example.com',
+    origin: 'https://igym.example.com',
+    origins: ['https://igym.example.com', 'https://gym.example.com']
+  });
+  assert.match(out, /allowed origins=https:\/\/igym\.example\.com,https:\/\/gym\.example\.com/);
 });
 
 test('leaves an unrelated verification failure alone', () => {

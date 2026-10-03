@@ -47,7 +47,14 @@ jobs:
       - run: npm test
         working-directory: frontend
       # A broken import or bad JSX fails the build long before any test covers it.
+      # Default is deliberately non-PWA; verify the artifact, then verify the opt-in PWA build.
       - run: npm run build
+        working-directory: frontend
+      - run: npm run verify:non-pwa
+        working-directory: frontend
+      - run: npm run build:pwa
+        working-directory: frontend
+      - run: npm run verify:pwa
         working-directory: frontend
       - run: node scripts/check-locales.mjs
         working-directory: frontend
@@ -98,6 +105,8 @@ jobs:
       - run: npm ci --omit=optional
         working-directory: api
       - run: npm test
+        working-directory: api
+      - run: node --test origins.test.js verify-error.test.js
         working-directory: api
       # The api's copy of the exercise catalogue is generated and committed. A dataset change
       # that forgets to regenerate it would otherwise only surface as "the Coach can't find
