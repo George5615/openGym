@@ -19,12 +19,14 @@ import { startCadence } from './coach/cadence.js';
 import { startWarmup } from './coach/warmup.js';
 import { dayReminderPush, restTimerPush, testPush } from './push-messages.js';
 import { verifyError } from './verify-error.js';
+import { allowedOrigins, originAllowed } from './origins.js';
 
 const PORT = +(process.env.PORT || 3000);
 const DATA = process.env.DATA_DIR || '/data';
 const RP_ID = process.env.RP_ID || 'localhost';
 const ORIGIN = process.env.ORIGIN || 'http://localhost:8080';
 const RP_NAME = process.env.RP_NAME || 'openGym';
+const ALLOWED_ORIGINS = allowedOrigins(ORIGIN, process.env.ALLOWED_ORIGINS);
 // Admin dashboard (issue): admins are matched by uid; INVITE_ONLY gates new signups behind a
 // code the admin generates. Both default off so a fresh self-hosted instance stays open.
 const ADMIN_UIDS = (process.env.ADMIN_UIDS || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -456,7 +458,7 @@ const clearCookie = COOKIE === LEGACY_COOKIE
 // Content-Type claims, so a hostile page could reach the state-changing routes with a form-style
 // POST that needs no CORS preflight at all.
 //
-// So a state-changing request that came from a browser has to come from ORIGIN. The exemptions
+// So a state-changing request that came from a browser has to come from an allowed origin. The exemptions
 // below are not holes: each of those routes carries its own credential in the body (a WebAuthn
 // challenge id, a one-shot pairing code), none of them acts on the caller's existing session, and
 // they have to keep working from the mobile WebView, whose origin is never ORIGIN.
@@ -465,7 +467,6 @@ const CSRF_EXEMPT = new Set([
   'POST /api/login/options', 'POST /api/login/verify',
   'POST /api/pair/redeem'
 ]);
-const originsMatch = (a, b) => a.replace(/\/+$/, '') === b.replace(/\/+$/, '');
 function csrfOk(req, key) {
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return true;
   if (CSRF_EXEMPT.has(key)) return true;
@@ -485,7 +486,7 @@ function csrfOk(req, key) {
   // Browsers put an Origin on every state-changing request and a page cannot suppress it, so the
   // forgery this exists to stop always carries one.
   if (!origin) return true;
-  return originsMatch(origin, ORIGIN);
+  return originAllowed(origin, ALLOWED_ORIGINS);
 }
 
 /* ---------- challenge store (in-memory, 5 min TTL) ---------- */
@@ -733,14 +734,14 @@ const routes = {
       verification = await verifyRegistrationResponse({
         response: body.credential,
         expectedChallenge: c.challenge,
-        expectedOrigin: ORIGIN,
+        expectedOrigin: ALLOWED_ORIGINS,
         expectedRPID: RP_ID,
         requireUserVerification: false
       });
     } catch (e) {
       // e.message can echo attacker-supplied response fields, so only the reason code is kept.
       audit(req, 'auth.register.fail', { ok: false, name: c.name, msg: 'verify-error' });
-      return json(res, 400, { error: verifyError(e, { rpId: RP_ID, origin: ORIGIN }) });
+      return json(res, 400, { error: verifyError(e, { rpId: RP_ID, origin: ORIGIN, origins: ALLOWED_ORIGINS }) });
     }
     if (!verification.verified) {
       audit(req, 'auth.register.fail', { ok: false, name: c.name, msg: 'not-verified' });
@@ -802,7 +803,7 @@ const routes = {
       verification = await verifyAuthenticationResponse({
         response: body.credential,
         expectedChallenge: c.challenge,
-        expectedOrigin: ORIGIN,
+        expectedOrigin: ALLOWED_ORIGINS,
         expectedRPID: RP_ID,
         requireUserVerification: false,
         credential: {
@@ -814,7 +815,7 @@ const routes = {
       });
     } catch (e) {
       audit(req, 'auth.login.fail', { ok: false, user: db.users.find(u => u.id === cred.userId), uid: cred.userId, msg: 'verify-error' });
-      return json(res, 400, { error: verifyError(e, { rpId: RP_ID, origin: ORIGIN }) });
+      return json(res, 400, { error: verifyError(e, { rpId: RP_ID, origin: ORIGIN, origins: ALLOWED_ORIGINS }) });
     }
     if (!verification.verified) {
       audit(req, 'auth.login.fail', { ok: false, user: db.users.find(u => u.id === cred.userId), uid: cred.userId, msg: 'not-verified' });
@@ -1255,4 +1256,6 @@ http.createServer(async (req, res) => {
     console.error(key, e);
     if (!res.headersSent) json(res, 500, { error: 'server error' });
   }
-}).listen(PORT, () => console.log(`gym-api on :${PORT} (rpID=${RP_ID}, origin=${ORIGIN})`));
+}).listen(PORT, () => console.log(
+  `gym-api on :${PORT} (rpID=${RP_ID}, origin=${ORIGIN}, allowedOrigins=${ALLOWED_ORIGINS.join(',')})`
+));
