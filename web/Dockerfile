@@ -20,6 +20,9 @@ COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci --ignore-scripts
 COPY api/coach/core/ /app/api/coach/core/
 COPY frontend/ ./
+# Normal web is the default. Build the installable/service-worker variant explicitly with PWA=1.
+ARG PWA=0
+ENV VITE_PWA=$PWA
 RUN npm run build
 
 FROM nginx:alpine
