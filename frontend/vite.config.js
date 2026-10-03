@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -11,6 +11,23 @@ const backend = process.env.API_TARGET || 'http://127.0.0.1:3000'
 // changed ORIGIN: API_ORIGIN=https://gym.example.com npm run dev
 const apiOrigin = process.env.API_ORIGIN || 'http://localhost:8080'
 const media = process.env.MEDIA_TARGET || 'http://127.0.0.1:8888'
+const pwa = process.env.VITE_PWA === '1'
+
+const pwaBuild = {
+  name: 'opengym-pwa-mode',
+  transformIndexHtml(html) {
+    const block = /<!-- PWA_START -->([\s\S]*?)<!-- PWA_END -->/
+    const match = html.match(block)
+    if (!match) throw new Error('PWA marker block missing from frontend/index.html')
+    return html.replace(block, pwa ? match[1] : '')
+  },
+  closeBundle() {
+    if (pwa) return
+    const dir = new URL('./dist/', import.meta.url)
+    rmSync(new URL('manifest.json', dir), { force: true })
+    rmSync(new URL('sw.js', dir), { force: true })
+  }
+}
 
 // Optional web analytics (Umami). Injected only when BOTH vars are set at build time,
 // so a plain `npm run build` — and every self-hosted install — stays telemetry-free.
@@ -52,8 +69,11 @@ const swStamp = {
 const pkgVersion = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version
 
 export default defineConfig({
-  define: { __APP_VERSION__: JSON.stringify(pkgVersion) },
-  plugins: [react(), umami, swStamp],
+  define: {
+    __APP_VERSION__: JSON.stringify(pkgVersion),
+    __PWA__: JSON.stringify(pwa)
+  },
+  plugins: [react(), umami, pwaBuild, ...(pwa ? [swStamp] : [])],
   base: './',
   server: {
     // The Coach's core (payload, validator, prompts, HTTP adapters) lives in ../api/coach/core
