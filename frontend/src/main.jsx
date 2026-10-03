@@ -11,7 +11,8 @@ createRoot(document.getElementById('root')).render(
   <StrictMode><App /></StrictMode>
 )
 
-// Not in the mobile build: the native shell already serves everything from disk.
-if (!MOBILE && 'serviceWorker' in navigator && location.protocol === 'https:') {
+// The normal web build deliberately has no service worker. PWA is an explicit build mode;
+// the native mobile shell also serves everything from disk and never registers this worker.
+if (__PWA__ && !MOBILE && 'serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {})
 }
